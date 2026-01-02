@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Osmo Pocket 3 Data Logger</title>
+    <style>
+        :root {
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --primary: #bb86fc;
+            --secondary: #03dac6;
+            --error: #cf6679;
+            --text: #e0e0e0;
+            --muted: #a0a0a0;
+            --border: #333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1, h2, h3 { margin-top: 0; font-weight: 600; }
+        h1 { color: var(--primary); }
+        
+        /* Utility */
+        .hidden { display: none; }
+        .btn {
+            background-color: var(--primary);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-secondary { background-color: var(--surface); color: var(--primary); border: 1px solid var(--primary); }
+        .btn-danger { background-color: var(--error); color: white; }
+        .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+
+        /* Card Styles */
+        .card {
+            background-color: var(--surface);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+
+        /* Form Elements */
+        label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 0.9rem; }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            background-color: #2c2c2c;
+            border: 1px solid var(--border);
+            color: white;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+        input:focus, textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+        /* Section Specifics */
+        .specs-display {
+            background: #252525;
+            padding: 10px;
+            border-left: 4px solid var(--secondary);
+            margin-bottom: 15px;
+            font-family: monospace;
+            color: var(--secondary);
+        }
+
+        .shot-item {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .shot-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .delete-shot {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            color: var(--error);
+            border: none;
+            cursor: pointer;
+        }
+
+        /* List View */
+        .log-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+        .log-item:first-child { border-top-left-radius: 8px; border-top-right-radius: 8px; }
+        .log-item:last-child { border-bottom: none; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+        
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            background: var(--secondary);
+            color: #000;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 30px;">
+        <div>
+            <h1>Osmo Pocket 3 Log</h1>
+            <small style="color:var(--muted)">Local Data Storage</small>
+        </div>
+        <div>
+            <button onclick="downloadBackup()" class="btn btn-secondary btn-sm">Download JSON</button>
+        </div>
+    </header>
+
+    <div id="view-list">
+        <div style="margin-bottom: 20px;">
+            <button onclick="openEditor()" class="btn">+ New Shoot</button>
+        </div>
+        <div id="logs-container">
+            <p style="color:var(--muted)">No logs found. Create one!</p>
+        </div>
+    </div>
+
+    <div id="view-editor" class="hidden">
+        <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+            <button onclick="closeEditor()" class="btn btn-secondary">Cancel</button>
+            <button onclick="saveLog()" class="btn">Save Log</button>
+        </div>
+
+        <div class="card">
+            <h2>1. File Location</h2>
+            <label>Folder Ending (3 Chars)</label>
+            <input type="text" id="folderName" maxlength="3" placeholder="e.g. A01" oninput="updateCategoryPreview()">
+            <div id="categoryPreview" style="font-size: 0.9rem; color: var(--secondary);"></div>
+        </div>
+
+        <div class="card">
+            <h2>2. Camera Settings</h2>
+            <label>Profile</label>
+            <select id="cameraProfile" onchange="updateProfileSpecs()">
+                <option value="">Select Profile...</option>
+                <option value="C01">C01</option>
+                <option value="C02">C02</option>
+                <option value="C03">C03</option>
+                <option value="C04">C04</option>
+                <option value="C05">C05</option>
+                <option value="Manual">Manual</option>
+            </select>
+            
+            <div id="specsDisplay" class="specs-display hidden"></div>
+            
+            <div id="manualInput" class="hidden">
+                <label>Manual Settings Details</label>
+                <textarea id="manualDetails" placeholder="Resolution, fps, color profile..."></textarea>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>3. Details</h2>
+            <label>Location</label>
+            <input type="text" id="location" placeholder="e.g. Bangkok Streets">
+            <label>Purpose / Project Name</label>
+            <input type="text" id="purpose" placeholder="e.g. Vlog Ep. 4">
+        </div>
+
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2>4. Shot List</h2>
+                <button onclick="addShot()" class="btn btn-sm btn-secondary">+ Add Shot</button>
+            </div>
+            <div id="shots-container">
+                </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- DATA DEFINITIONS ---
+    const PROFILES = {
+        'C05': "2.4K | 30fps | D-log M | AWB",
+        'C04': "1080p | 30fps | D-log M | AWB",
+        'C03': "4K | 30fps | D-log M | AWB",
+        'C02': "4K | 30fps | AWB Only",
+        'C01': "4K | 60fps | D-log M | AWB"
+    };
+
+    // --- STATE MANAGEMENT ---
+    let logs = JSON.parse(localStorage.getItem('osmo_logs')) || [];
+    let currentId = null; // If editing, this holds the ID
+
+    // --- INITIALIZATION ---
+    renderList();
+
+    // --- CORE FUNCTIONS ---
+
+    function saveLog() {
+        const folderName = document.getElementById('folderName').value;
+        const profile = document.getElementById('cameraProfile').value;
+        
+        if (!folderName || !profile) {
+            alert("Please fill in Folder Name and Camera Profile.");
+            return;
+        }
+
+        // Gather Shots
+        const shotDivs = document.querySelectorAll('.shot-item');
+        const shots = Array.from(shotDivs).map(div => ({
+            name: div.querySelector('.shot-name').value,
+            loc: div.querySelector('.shot-loc').value,
+            color: div.querySelector('.shot-color').value,
+            duration: div.querySelector('.shot-dur').value,
+            notes: div.querySelector('.shot-notes').value
+        }));
+
+        const newLog = {
+            id: currentId || Date.now(),
+            date: new Date().toISOString(),
+            folderName: folderName.toUpperCase(),
+            category: folderName.charAt(0).toUpperCase(),
+            profile: profile,
+            manualDetails: document.getElementById('manualDetails').value,
+            location: document.getElementById('location').value,
+            purpose: document.getElementById('purpose').value,
+            shots: shots
+        };
+
+        if (currentId) {
+            const index = logs.findIndex(l => l.id === currentId);
+            logs[index] = newLog;
+        } else {
+            logs.unshift(newLog); // Add to top
+        }
+
+        localStorage.setItem('osmo_logs', JSON.stringify(logs));
+        closeEditor();
+        renderList();
+    }
+
+    function deleteLog(id) {
+        if(confirm("Delete this log permanently?")) {
+            logs = logs.filter(l => l.id !== id);
+            localStorage.setItem('osmo_logs', JSON.stringify(logs));
+            renderList();
+        }
+    }
+
+    function editLog(id) {
+        const log = logs.find(l => l.id === id);
+        if (!log) return;
+        
+        currentId = id;
+        
+        // Populate fields
+        document.getElementById('folderName').value = log.folderName;
+        document.getElementById('cameraProfile').value = log.profile;
+        document.getElementById('manualDetails').value = log.manualDetails || "";
+        document.getElementById('location').value = log.location;
+        document.getElementById('purpose').value = log.purpose;
+        
+        updateCategoryPreview();
+        updateProfileSpecs();
+
+        // Clear and repopulate shots
+        document.getElementById('shots-container').innerHTML = '';
+        log.shots.forEach(shot => addShot(shot));
+
+        // Switch View
+        document.getElementById('view-list').classList.add('hidden');
+        document.getElementById('view-editor').classList.remove('hidden');
+    }
+
+    // --- VIEW LOGIC ---
+
+    function openEditor() {
+        currentId = null;
+        // Reset Form
+        document.getElementById('folderName').value = '';
+        document.getElementById('cameraProfile').value = '';
+        document.getElementById('manualDetails').value = '';
+        document.getElementById('location').value = '';
+        document.getElementById('purpose').value = '';
+        document.getElementById('shots-container').innerHTML = '';
+        document.getElementById('specsDisplay').classList.add('hidden');
+        document.getElementById('manualInput').classList.add('hidden');
+        document.getElementById('categoryPreview').textContent = '';
+
+        // Add one empty shot by default
+        addShot();
+
+        document.getElementById('view-list').classList.add('hidden');
+        document.getElementById('view-editor').classList.remove('hidden');
+    }
+
+    function closeEditor() {
+        document.getElementById('view-editor').classList.add('hidden');
+        document.getElementById('view-list').classList.remove('hidden');
+    }
+
+    function renderList() {
+        const container = document.getElementById('logs-container');
+        container.innerHTML = '';
+
+        if (logs.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--muted)">No logs yet.<br>Click "+ New Shoot" to start.</div>';
+            return;
+        }
+
+        logs.forEach(log => {
+            const date = new Date(log.date).toLocaleDateString();
+            const div = document.createElement('div');
+            div.className = 'log-item';
+            div.innerHTML = `
+                <div>
+                    <div>
+                        <span class="tag">${log.folderName}</span>
+                        <strong>${log.purpose || 'Untitled Shoot'}</strong>
+                    </div>
+                    <small style="color:var(--muted)">${date} | ${log.profile} | ${log.shots.length} Shots</small>
+                </div>
+                <div>
+                    <button onclick="editLog(${log.id})" class="btn btn-sm btn-secondary">Edit</button>
+                    <button onclick="deleteLog(${log.id})" class="btn btn-sm btn-danger" style="margin-left:5px;">&times;</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    // --- FORM HELPERS ---
+
+    function updateCategoryPreview() {
+        const val = document.getElementById('folderName').value;
+        const display = document.getElementById('categoryPreview');
+        if (val.length > 0) {
+            display.textContent = `Category Detected: ${val.charAt(0).toUpperCase()}`;
+        } else {
+            display.textContent = '';
+        }
+    }
+
+    function updateProfileSpecs() {
+        const val = document.getElementById('cameraProfile').value;
+        const specsDiv = document.getElementById('specsDisplay');
+        const manualDiv = document.getElementById('manualInput');
+
+        if (val === 'Manual') {
+            specsDiv.classList.add('hidden');
+            manualDiv.classList.remove('hidden');
+        } else if (PROFILES[val]) {
+            manualDiv.classList.add('hidden');
+            specsDiv.classList.remove('hidden');
+            specsDiv.textContent = PROFILES[val];
+        } else {
+            specsDiv.classList.add('hidden');
+            manualDiv.classList.add('hidden');
+        }
+    }
+
+    function addShot(data = null) {
+        const container = document.getElementById('shots-container');
+        const div = document.createElement('div');
+        div.className = 'shot-item';
+        div.innerHTML = `
+            <button class="delete-shot" onclick="this.parentElement.remove()">Remove</button>
+            <div class="shot-grid">
+                <div>
+                    <label>Shot Name</label>
+                    <input type="text" class="shot-name" placeholder="Name" value="${data ? data.name : ''}">
+                </div>
+                <div>
+                    <label>Location/File</label>
+                    <input type="text" class="shot-loc" placeholder="File #" value="${data ? data.loc : ''}">
+                </div>
+            </div>
+            <div class="shot-grid">
+                <div>
+                    <label>Color Profile</label>
+                    <input type="text" class="shot-color" placeholder="D-Log M" value="${data ? data.color : 'D-log M'}">
+                </div>
+                <div>
+                    <label>Duration</label>
+                    <input type="text" class="shot-dur" placeholder="00:00" value="${data ? data.duration : ''}">
+                </div>
+            </div>
+            <label>Notes</label>
+            <textarea class="shot-notes" rows="2" style="margin-bottom:0">${data ? data.notes : ''}</textarea>
+        `;
+        container.appendChild(div);
+    }
+
+    // --- BACKUP FEATURE ---
+    function downloadBackup() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(logs));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "osmo_logs_backup.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    }
+</script>
+
+</body>
+</html>
