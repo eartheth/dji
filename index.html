@@ -3,91 +3,140 @@
 <head>
 <meta charset="UTF-8">
 <title>DJI Osmo Pocket 3 – Video Log</title>
+
 <style>
+/* ===== BASE ===== */
 body {
-    font-family: Arial, sans-serif;
-    background: #0f172a;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0b1220;
     color: #e5e7eb;
     margin: 0;
     padding: 20px;
 }
-h1, h2 {
+h1, h2, h3 {
     color: #38bdf8;
 }
 .container {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: auto;
 }
 .card {
-    background: #020617;
+    background: rgba(2,6,23,0.95);
     border: 1px solid #1e293b;
-    border-radius: 8px;
-    padding: 16px;
+    border-radius: 10px;
+    padding: 18px;
     margin-bottom: 20px;
 }
 label {
     display: block;
-    margin-top: 10px;
+    margin-top: 12px;
     font-size: 14px;
+    color: #cbd5f5;
 }
-input, select, textarea {
+input, textarea {
     width: 100%;
-    margin-top: 4px;
-    padding: 8px;
+    margin-top: 6px;
+    padding: 10px;
     background: #020617;
     border: 1px solid #334155;
     color: #e5e7eb;
-    border-radius: 4px;
+    border-radius: 6px;
 }
+textarea { resize: vertical; }
+
 button {
-    margin-top: 10px;
-    padding: 8px 14px;
+    margin-top: 12px;
+    padding: 10px 16px;
     background: #38bdf8;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     color: #020617;
-    font-weight: bold;
+    font-weight: 600;
 }
 button.secondary {
-    background: #64748b;
-    color: white;
-}
-.shot {
-    border: 1px dashed #334155;
-    padding: 10px;
-    margin-top: 10px;
-}
-.session {
-    border-left: 4px solid #38bdf8;
+    background: #475569;
+    color: #e5e7eb;
 }
 .small {
     font-size: 12px;
     color: #94a3b8;
+    margin-top: 4px;
+}
+
+/* ===== DJI PRESETS ===== */
+.preset-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+}
+.preset {
+    background: rgba(2,6,23,0.8);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    min-width: 140px;
+}
+.preset.active {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px #38bdf8 inset;
+}
+.preset-code {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+.preset-desc {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+/* ===== CATEGORY ===== */
+.category-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 6px;
+}
+
+/* ===== SHOTS ===== */
+.shot {
+    border: 1px dashed #334155;
+    padding: 12px;
+    margin-top: 12px;
+    border-radius: 8px;
+}
+
+/* ===== SAVED SESSIONS ===== */
+.session {
+    border-left: 4px solid #38bdf8;
+}
+.session h4 {
+    margin-bottom: 6px;
 }
 </style>
 </head>
-<body>
 
+<body>
 <div class="container">
+
 <h1>🎥 DJI Osmo Pocket 3 – Video Log</h1>
 
+<!-- ================= NEW SESSION ================= -->
 <div class="card">
 <h2>New Video Session</h2>
 
-<label>File Location (last 3 chars)</label>
-<input id="folder">
+<label>File Location (last 3 characters)</label>
+<input id="folder" maxlength="3" placeholder="e.g. A7F">
+<div id="categoryDisplay"></div>
 
 <label>Preset</label>
-<select id="preset" onchange="updatePresetInfo()">
-<option value="">-- Select --</option>
-<option value="C01">C01</option>
-<option value="C02">C02</option>
-<option value="C03">C03</option>
-<option value="C04">C04</option>
-<option value="C05">C05</option>
-<option value="Manual">Manual</option>
-</select>
+<div id="presetBar" class="preset-bar"></div>
+<input type="hidden" id="preset">
 <div class="small" id="presetInfo"></div>
 
 <label>Location</label>
@@ -107,11 +156,14 @@ button.secondary {
 <button onclick="saveSession()">Save Session</button>
 </div>
 
+<!-- ================= SAVED ================= -->
 <h2>Saved Sessions</h2>
 <div id="sessions"></div>
+
 </div>
 
 <script>
+/* ===== PRESETS ===== */
 const presetMap = {
     C01: "4K · 60fps · D-Log M · AWB",
     C02: "4K · 30fps · AWB",
@@ -120,12 +172,66 @@ const presetMap = {
     C05: "2.4K · 30fps · D-Log M · AWB"
 };
 
-function updatePresetInfo() {
-    const p = document.getElementById("preset").value;
-    document.getElementById("presetInfo").innerText =
-        presetMap[p] || "";
+/* ===== CATEGORIES ===== */
+const categoryMap = {
+    A: { name: "Family", color: "#22c55e" },
+    B: { name: "B-roll / Cinematic", color: "#38bdf8" },
+    C: { name: "Client Work", color: "#f59e0b" },
+    D: { name: "Drone / Aerial", color: "#a855f7" },
+    T: { name: "Test / Settings", color: "#64748b" }
+};
+
+/* ===== RENDER PRESETS ===== */
+function renderPresets() {
+    const bar = document.getElementById("presetBar");
+    Object.entries(presetMap).forEach(([code, desc]) => {
+        const p = document.createElement("div");
+        p.className = "preset";
+        p.innerHTML = `
+            <div class="preset-code">${code}</div>
+            <div class="preset-desc">${desc}</div>
+        `;
+        p.onclick = () => selectPreset(code);
+        bar.appendChild(p);
+    });
+
+    const manual = document.createElement("div");
+    manual.className = "preset";
+    manual.innerHTML = `
+        <div class="preset-code">MAN</div>
+        <div class="preset-desc">Manual Settings</div>
+    `;
+    manual.onclick = () => selectPreset("Manual");
+    bar.appendChild(manual);
 }
 
+function selectPreset(code) {
+    document.getElementById("preset").value = code;
+    document.getElementById("presetInfo").innerText =
+        presetMap[code] || "Manual configuration";
+
+    document.querySelectorAll(".preset").forEach(p => p.classList.remove("active"));
+    [...document.querySelectorAll(".preset")].find(p =>
+        p.innerText.startsWith(code === "Manual" ? "MAN" : code)
+    )?.classList.add("active");
+}
+
+/* ===== CATEGORY DETECTION ===== */
+folder.addEventListener("input", e => {
+    const key = e.target.value.toUpperCase().charAt(0);
+    const cat = categoryMap[key];
+    const div = document.getElementById("categoryDisplay");
+
+    if (cat) {
+        div.innerHTML = `<span class="category-badge" style="background:${cat.color}22;color:${cat.color}">
+            ${key} – ${cat.name}
+        </span>`;
+    } else {
+        div.innerHTML = `<span class="small">Unknown category</span>`;
+    }
+});
+
+/* ===== SHOTS ===== */
 function addShot(data = {}) {
     const div = document.createElement("div");
     div.className = "shot";
@@ -142,11 +248,16 @@ function addShot(data = {}) {
         <textarea class="shotNotes">${data.notes || ""}</textarea>
         <button class="secondary" onclick="this.parentElement.remove()">Delete Shot</button>
     `;
-    document.getElementById("shots").appendChild(div);
+    shots.appendChild(div);
 }
 
+/* ===== SAVE ===== */
 function saveSession() {
-    const shots = [...document.querySelectorAll(".shot")].map(s => ({
+    const folderCode = folder.value.toUpperCase();
+    const catKey = folderCode.charAt(0);
+    const cat = categoryMap[catKey] || { name: "Unknown", color: "#94a3b8" };
+
+    const shotsData = [...document.querySelectorAll(".shot")].map(s => ({
         name: s.querySelector(".shotName").value,
         location: s.querySelector(".shotLocation").value,
         color: s.querySelector(".shotColor").value,
@@ -156,13 +267,14 @@ function saveSession() {
 
     const session = {
         id: Date.now(),
-        folder: folder.value,
+        folder: folderCode,
+        category: { code: catKey, name: cat.name },
         preset: preset.value,
         presetInfo: presetMap[preset.value] || "Manual",
         location: location.value,
         purpose: purpose.value,
         notes: notes.value,
-        shots
+        shots: shotsData
     };
 
     const data = JSON.parse(localStorage.getItem("osmoLog") || "[]");
@@ -171,28 +283,31 @@ function saveSession() {
     location.reload();
 }
 
+/* ===== LOAD ===== */
 function loadSessions() {
     const data = JSON.parse(localStorage.getItem("osmoLog") || "[]");
-    const wrap = document.getElementById("sessions");
+    sessions.innerHTML = "";
 
     data.forEach(s => {
         const div = document.createElement("div");
         div.className = "card session";
         div.innerHTML = `
-            <strong>📁 ${s.folder}</strong> | ${s.preset} – ${s.presetInfo}<br>
+            <h4>📁 ${s.folder} | ${s.category.code} – ${s.category.name}</h4>
+            🎛 ${s.preset} – ${s.presetInfo}<br>
             📍 ${s.location} | 🎯 ${s.purpose}<br>
             <em>${s.notes}</em>
+
             <h4>Shots</h4>
             ${s.shots.map(sh => `
                 <div class="small">
-                • <strong>${sh.name}</strong> (${sh.duration}) – ${sh.color}<br>
-                ${sh.location}<br>
-                ${sh.notes}
+                    • <strong>${sh.name}</strong> (${sh.duration}) – ${sh.color}<br>
+                    ${sh.location}<br>${sh.notes}
                 </div>
             `).join("")}
+
             <button class="secondary" onclick="deleteSession(${s.id})">Delete Session</button>
         `;
-        wrap.appendChild(div);
+        sessions.appendChild(div);
     });
 }
 
@@ -203,8 +318,8 @@ function deleteSession(id) {
     location.reload();
 }
 
+renderPresets();
 loadSessions();
 </script>
-
 </body>
 </html>
